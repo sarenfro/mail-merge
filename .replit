@@ -1,5 +1,4 @@
-run = "pnpm run dev"
-entrypoint = "src/app/page.tsx"
+run = "pnpm install --ignore-workspace && pnpm run dev"
 
 [[ports]]
 localPort = 3000
