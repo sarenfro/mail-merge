@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Trash2, Plus, Upload } from 'lucide-react'
+import { Trash2, Plus, Upload, FileSpreadsheet, X } from 'lucide-react'
+import { read, utils } from 'xlsx'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,12 +11,53 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { Recipient } from '@/types'
 
+// Normalise common column name variations to our field names
+const FIELD_ALIASES: Record<string, string> = {
+  email: 'email',
+  'e-mail': 'email',
+  'email address': 'email',
+  first_name: 'first_name',
+  firstname: 'first_name',
+  'first name': 'first_name',
+  given_name: 'first_name',
+  'given name': 'first_name',
+  last_name: 'last_name',
+  lastname: 'last_name',
+  'last name': 'last_name',
+  surname: 'last_name',
+  family_name: 'last_name',
+  'family name': 'last_name',
+  company: 'company',
+  organization: 'company',
+  organisation: 'company',
+  employer: 'company',
+}
+
+function normaliseHeader(h: string) {
+  return FIELD_ALIASES[h.trim().toLowerCase()] ?? h.trim().toLowerCase()
+}
+
+async function importRows(rows: Record<string, string>[]) {
+  let ok = 0
+  for (const row of rows) {
+    if (!row.email) continue
+    const res = await fetch('/api/recipients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(row),
+    })
+    if (res.ok) ok++
+  }
+  return ok
+}
+
 export default function RecipientsPage() {
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ email: '', first_name: '', last_name: '', company: '' })
-  const [csvText, setCsvText] = useState('')
-  const [showCsv, setShowCsv] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [preview, setPreview] = useState<{ rows: Record<string, string>[]; fileName: string } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     const res = await fetch('/api/recipients')
@@ -50,28 +92,39 @@ export default function RecipientsPage() {
     }
   }
 
-  async function importCsv() {
-    const lines = csvText.trim().split('\n')
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
-    const rows = lines.slice(1).map(line => {
-      const vals = line.split(',')
-      return Object.fromEntries(headers.map((h, i) => [h, vals[i]?.trim() ?? '']))
-    })
-    let ok = 0
-    for (const row of rows) {
-      if (!row.email) continue
-      const res = await fetch('/api/recipients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(row),
-      })
-      if (res.ok) ok++
-    }
-    toast.success(`Imported ${ok} recipients`)
-    setCsvText('')
-    setShowCsv(false)
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const buf = await file.arrayBuffer()
+    const wb = read(buf)
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const raw = utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+
+    const rows = raw.map(r =>
+      Object.fromEntries(
+        Object.entries(r).map(([k, v]) => [normaliseHeader(String(k)), String(v)])
+      )
+    )
+
+    setPreview({ rows, fileName: file.name })
+    // reset so re-uploading same file works
+    e.target.value = ''
+  }
+
+  async function confirmImport() {
+    if (!preview) return
+    setImporting(true)
+    const ok = await importRows(preview.rows)
+    setImporting(false)
+    toast.success(`Imported ${ok} of ${preview.rows.length} rows`)
+    setPreview(null)
     load()
   }
+
+  const previewCols = preview
+    ? Array.from(new Set(preview.rows.flatMap(r => Object.keys(r)))).slice(0, 6)
+    : []
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-8">
@@ -82,25 +135,80 @@ export default function RecipientsPage() {
             {recipients.length} recipient{recipients.length !== 1 ? 's' : ''} total
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setShowCsv(v => !v)}>
-          <Upload className="h-4 w-4 mr-1" /> Import CSV
-        </Button>
+        <div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={handleFile}
+          />
+          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+            <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Upload XLSX / CSV
+          </Button>
+        </div>
       </div>
 
-      {showCsv && (
-        <Card className="p-4 space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Paste CSV with headers: <code>email, first_name, last_name, company</code>
+      {/* File preview & confirm */}
+      {preview && (
+        <Card className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{preview.fileName}</span>
+              <Badge variant="secondary">{preview.rows.length} rows</Badge>
+            </div>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreview(null)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Column mapping notice */}
+          <p className="text-xs text-muted-foreground">
+            Detected columns: {previewCols.join(', ')}. Columns named{' '}
+            <code>email</code>, <code>first_name</code>, <code>last_name</code>, <code>company</code>{' '}
+            (and common variants) map automatically. Anything else is ignored.
           </p>
-          <textarea
-            className="w-full font-mono text-xs border rounded p-2 h-32 resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-            placeholder="email,first_name,last_name,company&#10;jane@example.com,Jane,Doe,Acme"
-            value={csvText}
-            onChange={e => setCsvText(e.target.value)}
-          />
-          <Button size="sm" onClick={importCsv} disabled={!csvText.trim()}>
-            Import
-          </Button>
+
+          {/* Mini table preview */}
+          <div className="overflow-x-auto rounded border text-xs">
+            <table className="w-full">
+              <thead className="bg-muted/50">
+                <tr>
+                  {previewCols.map(c => (
+                    <th key={c} className="px-3 py-2 text-left font-medium text-muted-foreground">
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {preview.rows.slice(0, 5).map((row, i) => (
+                  <tr key={i} className="border-t">
+                    {previewCols.map(c => (
+                      <td key={c} className="px-3 py-2 truncate max-w-[140px]">
+                        {row[c] ?? ''}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {preview.rows.length > 5 && (
+              <p className="px-3 py-2 text-muted-foreground border-t">
+                …and {preview.rows.length - 5} more rows
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <Button size="sm" onClick={confirmImport} disabled={importing}>
+              {importing ? 'Importing…' : `Import ${preview.rows.length} recipients`}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setPreview(null)}>
+              Cancel
+            </Button>
+          </div>
         </Card>
       )}
 
