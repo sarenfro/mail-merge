@@ -1,0 +1,6 @@
+run = "pnpm run dev"
+entrypoint = "src/app/page.tsx"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
