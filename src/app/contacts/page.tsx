@@ -18,7 +18,8 @@ export default function ContactsPage() {
 
   async function load() {
     const res = await fetch('/api/contacts/lists')
-    setLists(await res.json())
+    const data = await res.json()
+    setLists(Array.isArray(data) ? data : [])
   }
 
   useEffect(() => { load() }, [])
