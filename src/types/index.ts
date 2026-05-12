@@ -1,5 +1,13 @@
-export interface Recipient {
+export interface ContactList {
   id: string
+  name: string
+  created_at: string
+  contact_count?: number
+}
+
+export interface Contact {
+  id: string
+  list_id: string
   email: string
   first_name: string | null
   last_name: string | null
@@ -8,23 +16,45 @@ export interface Recipient {
   created_at: string
 }
 
-export interface Template {
+export interface Campaign {
   id: string
   name: string
   subject: string
   html_content: string
+  from_name: string
+  from_email: string
+  list_id: string | null
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
+  scheduled_at: string | null
+  sent_at: string | null
+  total_sent: number
   created_at: string
-  updated_at: string
 }
 
-export interface SendLog {
+export interface CampaignRecipient {
   id: string
-  template_id: string
-  template_name: string
-  recipient_count: number
+  campaign_id: string
+  contact_id: string | null
+  email: string
+  status: 'sent' | 'failed' | 'bounced'
   sent_at: string
-  status: 'sent' | 'failed' | 'partial'
-  errors: string[] | null
 }
 
-export type MergeField = keyof Omit<Recipient, 'id' | 'created_at' | 'custom_fields'>
+export interface EmailEvent {
+  id: string
+  campaign_id: string
+  recipient_id: string
+  email: string
+  event_type: 'open' | 'click'
+  url: string | null
+  occurred_at: string
+}
+
+export interface CampaignStats {
+  total_sent: number
+  opens: number
+  unique_opens: number
+  clicks: number
+  unique_clicks: number
+  failed: number
+}

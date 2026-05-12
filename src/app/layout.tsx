@@ -7,8 +7,8 @@ import { Toaster } from '@/components/ui/sonner'
 const geist = Geist({ variable: '--font-sans', subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Mail Merge',
-  description: 'Send personalized bulk emails via Brevo',
+  title: 'MailMerge',
+  description: 'GMass-style mail merge with tracking',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="flex h-full bg-background text-foreground">
         <Sidebar />
         <main className="flex-1 overflow-y-auto">{children}</main>
-        <Toaster richColors />
+        <Toaster richColors position="bottom-right" />
       </body>
     </html>
   )

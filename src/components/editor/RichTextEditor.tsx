@@ -25,7 +25,7 @@ export function RichTextEditor({ content, onChange }: Props) {
       Color,
       FontFamily,
       Highlight.configure({ multicolor: true }),
-      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-primary underline' } }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'text-primary underline cursor-pointer' } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
     ],
     content,
@@ -33,16 +33,13 @@ export function RichTextEditor({ content, onChange }: Props) {
       onChange(editor.getHTML())
     },
     editorProps: {
-      attributes: {
-        class:
-          'min-h-[400px] max-w-none p-4 focus:outline-none prose prose-sm dark:prose-invert',
-      },
+      attributes: { class: 'min-h-[360px] p-4 focus:outline-none prose prose-sm max-w-none dark:prose-invert' },
     },
     immediatelyRender: false,
   })
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border rounded-lg overflow-hidden bg-background">
       <EditorToolbar editor={editor} />
       <EditorContent editor={editor} />
     </div>
